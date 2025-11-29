@@ -1,6 +1,5 @@
 use std::io;
 use std::mem;
-use std::os::unix::io::AsRawFd;
 use std::time::{Duration, Instant};
 
 // Linux socket 常數

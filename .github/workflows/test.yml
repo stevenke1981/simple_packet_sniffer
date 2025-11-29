@@ -52,8 +52,11 @@ jobs:
     - name: Strip binary
       run: |
         export STAGING_DIR=$(pwd)/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64/staging_dir
-        $STAGING_DIR/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin/aarch64-openwrt-linux-strip \
-          target/aarch64-unknown-linux-musl/release/*
+        # 只 strip 執行檔，不處理目錄和其他檔案
+        if [ -f target/aarch64-unknown-linux-musl/release/raw_socket_capture ]; then
+          $STAGING_DIR/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin/aarch64-openwrt-linux-strip \
+            target/aarch64-unknown-linux-musl/release/raw_socket_capture
+        fi
     
     - name: Show binary info
       run: |
