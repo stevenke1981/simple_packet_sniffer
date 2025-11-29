@@ -7,8 +7,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== 簡單封包抓取工具 ===");
     
     // 獲取預設網路介面
-    let device = Device::lookup()?
-        .ok_or("找不到可用的網路介面")?;
+    let device = Device::lookup()
+        .expect("找不到可用的網路介面");
     
     println!("使用網路介面: {}", device.name);
     println!("開始抓取封包，持續 60 秒...");
