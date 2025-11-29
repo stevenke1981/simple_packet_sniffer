@@ -13,19 +13,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("使用網路介面: {}", device.name);
     println!("開始抓取封包，持續 60 秒...");
     println!("{}", "=".repeat(40));
-
+    
     // 開啟抓取裝置
     let mut cap = Capture::from_device(device)?
         .promisc(true)
         .timeout(1000)
         .open()?;
-
+    
     let start_time = Instant::now();
     let duration = Duration::from_secs(60);
     let mut packet_count = 0;
-
+    
     while Instant::now().duration_since(start_time) < duration {
-        match cap.next_packet() {
+        match cap.next() {
             Ok(packet) => {
                 packet_count += 1;
                 print_packet_info(packet_count, &packet);
@@ -43,12 +43,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 讓出 CPU
         sleep(Duration::from_millis(1)).await;
     }
-
+    
     println!("{}", "=".repeat(40));
     println!("抓取完成!");
     println!("總共抓取 {} 個封包", packet_count);
     println!("執行時間: {:.2} 秒", start_time.elapsed().as_secs_f32());
-
+    
     Ok(())
 }
 
