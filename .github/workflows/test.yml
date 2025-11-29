@@ -1,5 +1,4 @@
-name: Build Rust with OpenWrt SDK
-
+name: Build Rust with OpenWrt SDK (No pcap)
 on:
   push:
     branches: [ main ]
@@ -25,27 +24,6 @@ jobs:
         aria2c -x 16 -s 16 -k 1M https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
         tar -I zstd -xf openwrt-sdk-*.tar.zst
     
-    - name: Install libpcap in OpenWRT SDK
-      run: |
-        cd openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64
-        
-        # 更新 feeds
-        ./scripts/feeds update -a
-        ./scripts/feeds install libpcap
-        
-        # 創建最小配置（非互動式）
-        cat > .config << EOF
-        CONFIG_TARGET_mediatek=y
-        CONFIG_TARGET_mediatek_filogic=y
-        CONFIG_PACKAGE_libpcap=y
-        EOF
-        
-        # 應用配置
-        make defconfig
-        
-        # 編譯 libpcap（不使用 menuconfig）
-        make package/libpcap/compile V=s -j$(nproc)
-    
     - name: Install Rust toolchain
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -56,26 +34,40 @@ jobs:
         source $HOME/.cargo/env
         rustup target add aarch64-unknown-linux-musl
     
-    - name: Build Rust project
+    - name: Build Rust project (Raw Socket)
       run: |
         source $HOME/.cargo/env
         
         export STAGING_DIR=$(pwd)/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64/staging_dir
         export PATH=$STAGING_DIR/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin:$PATH
         
-        # 設置 libpcap 路徑
-        export LIBPCAP_LIBDIR=$STAGING_DIR/target-aarch64_cortex-a53_musl/usr/lib
-        export PKG_CONFIG_PATH=$STAGING_DIR/target-aarch64_cortex-a53_musl/usr/lib/pkgconfig
-        
+        # Raw socket 不需要 libpcap，只需要標準 C 庫
         cargo build --release --target aarch64-unknown-linux-musl
       env:
         CC_aarch64_unknown_linux_musl: aarch64-openwrt-linux-gcc
         CXX_aarch64_unknown_linux_musl: aarch64-openwrt-linux-g++
         AR_aarch64_unknown_linux_musl: aarch64-openwrt-linux-ar
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-openwrt-linux-gcc
-
+    
+    - name: Strip binary
+      run: |
+        export STAGING_DIR=$(pwd)/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64/staging_dir
+        $STAGING_DIR/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin/aarch64-openwrt-linux-strip \
+          target/aarch64-unknown-linux-musl/release/*
+    
+    - name: Show binary info
+      run: |
+        ls -lh target/aarch64-unknown-linux-musl/release/
+        file target/aarch64-unknown-linux-musl/release/*
+    
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: aarch64-openwrt-binary
-        path: target/aarch64-unknown-linux-musl/release/
+        path: |
+          target/aarch64-unknown-linux-musl/release/raw_socket_capture
+          !target/aarch64-unknown-linux-musl/release/*.d
+          !target/aarch64-unknown-linux-musl/release/build
+          !target/aarch64-unknown-linux-musl/release/deps
+          !target/aarch64-unknown-linux-musl/release/examples
+          !target/aarch64-unknown-linux-musl/release/incremental
