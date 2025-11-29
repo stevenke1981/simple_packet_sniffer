@@ -21,9 +21,10 @@ jobs:
     
     - name: Download OpenWrt 24.10 SDK
       run: |
-        aria2c -x 16 -s 16 -k 1M https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
-        tar -I zstd -xf openwrt-sdk-*.tar.zst
-        mv openwrt-sdk-* openwrt-sdk
+        SDK_FILE="openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst"
+        aria2c -x 16 -s 16 -k 1M "https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/$SDK_FILE"
+        tar -I zstd -xf "$SDK_FILE"
+        mv openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64 openwrt-sdk
     
     - name: Install Rust toolchain
       run: |
