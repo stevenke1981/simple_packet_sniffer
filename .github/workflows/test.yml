@@ -1,0 +1,58 @@
+name: Build Rust with OpenWrt Toolchain
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential clang libssl-dev pkg-config curl wget git unzip
+    
+    - name: Download OpenWrt 24.10 toolchain
+      run: |
+        wget https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/openwrt-toolchain-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.xz
+        tar xJf openwrt-toolchain-*.tar.xz
+    
+    - name: Setup toolchain environment
+      run: |
+        cd openwrt-toolchain-*
+        echo "TOOLCHAIN_DIR=$PWD/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl" >> $GITHUB_ENV
+        echo "$PWD/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin" >> $GITHUB_PATH
+    
+    - name: Install Rust toolchain
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Add aarch64 musl target
+      run: |
+        source $HOME/.cargo/env
+        rustup target add aarch64-unknown-linux-musl
+    
+    - name: Build project
+      run: |
+        source $HOME/.cargo/env
+        cargo build --release --target aarch64-unknown-linux-musl
+      env:
+        CC_aarch64_unknown_linux_musl: ${{ env.TOOLCHAIN_DIR }}/bin/aarch64-openwrt-linux-gcc
+        CXX_aarch64_unknown_linux_musl: ${{ env.TOOLCHAIN_DIR }}/bin/aarch64-openwrt-linux-g++
+        AR_aarch64_unknown_linux_musl: ${{ env.TOOLCHAIN_DIR }}/bin/aarch64-openwrt-linux-ar
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: ${{ env.TOOLCHAIN_DIR }}/bin/aarch64-openwrt-linux-gcc
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: aarch64-openwrt-binary
+        path: target/aarch64-unknown-linux-musl/release/
