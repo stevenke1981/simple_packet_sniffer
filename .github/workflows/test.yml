@@ -18,16 +18,17 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y build-essential clang libssl-dev pkg-config curl wget git unzip zstd
+        sudo apt install -y build-essential clang libssl-dev pkg-config curl wget git unzip zstd aria2
     
-    - name: Download OpenWrt 24.10 SDK
+    - name: Download OpenWrt 24.10 SDK with aria2
       run: |
-        wget https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+        aria2c -x 16 -s 16 -k 1M https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
         tar -I zstd -xf openwrt-sdk-*.tar.zst
     
     - name: Setup toolchain environment
       run: |
-        cd openwrt-sdk-*
+        SDK_PATH=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*" | head -n 1)
+        cd "$SDK_PATH"
         echo "SDK_DIR=$PWD" >> $GITHUB_ENV
         echo "TOOLCHAIN_DIR=$PWD/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl" >> $GITHUB_ENV
         echo "$PWD/staging_dir/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin" >> $GITHUB_PATH
