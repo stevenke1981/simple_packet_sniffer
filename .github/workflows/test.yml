@@ -25,14 +25,26 @@ jobs:
         aria2c -x 16 -s 16 -k 1M https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
         tar -I zstd -xf openwrt-sdk-*.tar.zst
     
-    - name: Setup OpenWRT SDK
+    - name: Install libpcap in OpenWRT SDK
       run: |
-        cd openwrt-sdk-*/
+        cd openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64
         
-        # 更新並安裝 libpcap
+        # 更新 feeds
         ./scripts/feeds update -a
         ./scripts/feeds install libpcap
-        make package/libpcap/compile V=s
+        
+        # 創建最小配置（非互動式）
+        cat > .config << EOF
+        CONFIG_TARGET_mediatek=y
+        CONFIG_TARGET_mediatek_filogic=y
+        CONFIG_PACKAGE_libpcap=y
+        EOF
+        
+        # 應用配置
+        make defconfig
+        
+        # 編譯 libpcap（不使用 menuconfig）
+        make package/libpcap/compile V=s -j$(nproc)
     
     - name: Install Rust toolchain
       run: |
@@ -53,6 +65,7 @@ jobs:
         
         # 設置 libpcap 路徑
         export LIBPCAP_LIBDIR=$STAGING_DIR/target-aarch64_cortex-a53_musl/usr/lib
+        export PKG_CONFIG_PATH=$STAGING_DIR/target-aarch64_cortex-a53_musl/usr/lib/pkgconfig
         
         cargo build --release --target aarch64-unknown-linux-musl
       env:
