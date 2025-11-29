@@ -1,0 +1,141 @@
+name: Build OpenWrt IPK Package
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ipk:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential clang libssl-dev pkg-config curl wget git unzip zstd aria2
+    
+    - name: Download OpenWrt 24.10 SDK
+      run: |
+        aria2c -x 16 -s 16 -k 1M https://downloads.openwrt.org/releases/24.10.0/targets/mediatek/filogic/openwrt-sdk-24.10.0-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+        tar -I zstd -xf openwrt-sdk-*.tar.zst
+        mv openwrt-sdk-* openwrt-sdk
+    
+    - name: Install Rust toolchain
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Add aarch64 musl target
+      run: |
+        source $HOME/.cargo/env
+        rustup target add aarch64-unknown-linux-musl
+    
+    - name: Build Rust binary
+      run: |
+        source $HOME/.cargo/env
+        
+        export STAGING_DIR=$(pwd)/openwrt-sdk/staging_dir
+        export PATH=$STAGING_DIR/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin:$PATH
+        
+        cargo build --release --target aarch64-unknown-linux-musl
+      env:
+        CC_aarch64_unknown_linux_musl: aarch64-openwrt-linux-gcc
+        CXX_aarch64_unknown_linux_musl: aarch64-openwrt-linux-g++
+        AR_aarch64_unknown_linux_musl: aarch64-openwrt-linux-ar
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-openwrt-linux-gcc
+    
+    - name: Strip binary
+      run: |
+        export STAGING_DIR=$(pwd)/openwrt-sdk/staging_dir
+        if [ -f target/aarch64-unknown-linux-musl/release/raw_socket_capture ]; then
+          $STAGING_DIR/toolchain-aarch64_cortex-a53_gcc-13.3.0_musl/bin/aarch64-openwrt-linux-strip \
+            target/aarch64-unknown-linux-musl/release/raw_socket_capture
+        fi
+    
+    - name: Create OpenWrt package directory
+      run: |
+        mkdir -p openwrt-sdk/package/raw_socket_capture
+        
+        # 創建 Makefile
+        cat > openwrt-sdk/package/raw_socket_capture/Makefile << 'EOF'
+        include $(TOPDIR)/rules.mk
+        
+        PKG_NAME:=raw-socket-capture
+        PKG_VERSION:=1.0.0
+        PKG_RELEASE:=1
+        
+        PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
+        
+        include $(INCLUDE_DIR)/package.mk
+        
+        define Package/raw-socket-capture
+          SECTION:=net
+          CATEGORY:=Network
+          TITLE:=Raw Socket Packet Capture Tool
+          DEPENDS:=+kmod-tun
+        endef
+        
+        define Package/raw-socket-capture/description
+          A simple packet capture tool using raw sockets.
+          No libpcap dependency required.
+        endef
+        
+        define Build/Prepare
+        	mkdir -p $(PKG_BUILD_DIR)
+        endef
+        
+        define Build/Compile
+        	# Binary already compiled by Rust
+        endef
+        
+        define Package/raw-socket-capture/install
+        	$(INSTALL_DIR) $(1)/usr/sbin
+        	$(INSTALL_BIN) $(TOPDIR)/../target/aarch64-unknown-linux-musl/release/raw_socket_capture $(1)/usr/sbin/
+        endef
+        
+        $(eval $(call BuildPackage,raw-socket-capture))
+        EOF
+    
+    - name: Build IPK package
+      run: |
+        cd openwrt-sdk
+        
+        # 更新 feeds
+        ./scripts/feeds update -a
+        
+        # 創建基本配置
+        cat > .config << EOF
+        CONFIG_TARGET_mediatek=y
+        CONFIG_TARGET_mediatek_filogic=y
+        CONFIG_PACKAGE_raw-socket-capture=m
+        EOF
+        
+        make defconfig
+        
+        # 編譯套件
+        make package/raw_socket_capture/compile V=s
+    
+    - name: Find and list IPK files
+      run: |
+        echo "=== IPK 套件位置 ==="
+        find openwrt-sdk/bin -name "*.ipk" -type f
+        echo ""
+        echo "=== IPK 套件詳細資訊 ==="
+        find openwrt-sdk/bin -name "*.ipk" -type f -exec ls -lh {} \;
+    
+    - name: Upload IPK package
+      uses: actions/upload-artifact@v4
+      with:
+        name: openwrt-ipk-package
+        path: openwrt-sdk/bin/packages/*/base/*.ipk
+    
+    - name: Upload binary (fallback)
+      uses: actions/upload-artifact@v4
+      with:
+        name: raw-binary
+        path: target/aarch64-unknown-linux-musl/release/raw_socket_capture
