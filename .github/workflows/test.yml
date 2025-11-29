@@ -18,7 +18,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y build-essential clang libssl-dev pkg-config curl wget git unzip zstd aria2
+        sudo apt install -y build-essential clang libssl-dev pkg-config curl wget git unzip zstd aria2 libpcap-dev
     
     - name: Download OpenWrt 24.10 SDK with aria2
       run: |
